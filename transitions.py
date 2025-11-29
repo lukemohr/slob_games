@@ -2,6 +2,38 @@
 
 from typing import Any
 
+from state import State
+
+
+def canonical_terminal_state(board):
+    """Create the canonical terminal state from the board."""
+    return State(board, x_chips=0, o_chips=0, advantage=0)
+
+
+def check_winner(win_lines, board) -> tuple[bool, int | None]:
+    """Check if there is a winner on the board.
+
+    Args:
+        win_lines (list): The win conditions for the game.
+        board (tuple): Current board state.
+
+    Returns:
+        tuple[bool, int | None]: If the game is won, who the winner is or None if no
+        winner yet.
+
+    """
+    # Check X wins
+    for a, b in win_lines:
+        if board[a] == 0 and board[b] == 0:
+            return True, 0
+
+    # Check O wins
+    for a, b in win_lines:
+        if board[a] == 1 and board[b] == 1:
+            return True, 1
+
+    return False, None
+
 
 def legal_moves(board) -> list[int]:
     """Get all legal moves for the current board state.

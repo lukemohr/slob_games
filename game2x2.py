@@ -4,7 +4,7 @@ import numpy as np
 
 from bidding import bidding_outcomes
 from state import State
-from transitions import apply_cell, legal_moves
+from transitions import apply_cell, check_winner, legal_moves
 from utilities import weighted_random_choice
 
 
@@ -37,15 +37,10 @@ class SLOBGame2x2:
             for draw).
 
         """
-        # Check X wins
-        for a, b in self.win_lines:
-            if board[a] == 0 and board[b] == 0:
-                return True, 0
-
-        # Check O wins
-        for a, b in self.win_lines:
-            if board[a] == 1 and board[b] == 1:
-                return True, 1
+        # Check if there is a winner
+        is_won, outcome = check_winner(self.win_lines, board)
+        if is_won:
+            return True, outcome
 
         # Full board -> draw
         if all(x is not None for x in board):
