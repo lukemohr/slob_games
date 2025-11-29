@@ -9,7 +9,7 @@ CellType = None | int
 class State:
     """State representation for 2x2 SLOB game."""
 
-    board: tuple[CellType, CellType, CellType, CellType]
+    board: tuple[CellType, ...]
     x_chips: int
     o_chips: int
     advantage: int
