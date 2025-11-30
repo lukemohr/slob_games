@@ -1,9 +1,11 @@
 """Class for handling 2x2 SLOB Game."""
 
+from itertools import product
+
 import numpy as np
 
 from bidding import bidding_outcomes
-from state import State
+from state import State, canonicalize_state
 from transitions import apply_cell, check_winner, legal_moves
 from utilities import weighted_random_choice
 
@@ -11,11 +13,12 @@ from utilities import weighted_random_choice
 class SLOBGame2x2:
     """Class representing the 2x2 SLOB Game."""
 
-    def __init__(self, board_probs):
+    def __init__(self, board_probs, total_chips):
         """Initialize the game with board probabilities.
 
         Args:
             board_probs (list): A list of probabilities for each cell on the board.
+            total_chips (int): Total chips in the game.
 
         """
         self.board_probs = board_probs
@@ -25,6 +28,9 @@ class SLOBGame2x2:
             (0, 2),
             (1, 3),
         ]
+        self.total_chips = total_chips
+        self.canonical_map = self.build_terminal_canonical_map(total_chips)
+        self.legal_moves_cache = {}
 
     def is_terminal(self, board: tuple) -> tuple[bool, None | float]:
         """Check if the game has reached a terminal state.
@@ -47,6 +53,47 @@ class SLOBGame2x2:
             return True, 0.5
 
         return False, None
+
+    def find_terminal_boards(self) -> dict[tuple[int | None, ...], float]:
+        """Find all terminal boards.
+
+        Return a dictionary mapping terminal boards to the VALUE for X:
+            1.0   -> X wins
+            0.0   -> O wins
+            0.5   -> draw
+        """
+        all_boards = list(product([None, 0, 1], repeat=len(self.board_probs)))
+        terminal_boards = {}
+        for board in all_boards:
+            terminal, win_value = self.is_terminal(board)
+            if terminal:
+                assert win_value is not None
+                terminal_boards[board] = 1 - win_value
+        return terminal_boards
+
+    def build_terminal_canonical_map(self, total_chips) -> dict[tuple, State]:
+        """For every terminal board, assign a unique canonical State.
+
+        Convention:
+            - For X win:  State(board, x_chips=total_chips, o_chips=0, advantage=0)
+            - For O win:  State(board, x_chips=0, o_chips=total_chips, advantage=1)
+            - For draw:   State(board, x_chips=0, o_chips=0, advantage=0)
+
+        Returns:
+            A map: board_tuple -> canonical State
+
+        """
+        terminal_boards = self.find_terminal_boards()
+        canonical_map = {}
+        for board, win_value in terminal_boards.items():
+            if win_value == 1:
+                state = State(board, total_chips, 0, 0)
+            elif win_value == 0:
+                state = State(board, 0, total_chips, 1)
+            else:
+                state = State(board, 0, 0, 0)
+            canonical_map[board] = state
+        return canonical_map
 
     def successors(self, state: State) -> dict[State, float]:
         """Generate all possible successor states from the current state.
@@ -73,7 +120,11 @@ class SLOBGame2x2:
             # But we keep computation structure simple.
 
             # Winner chooses a move; in DP, both players choose BEST move
-            moves = legal_moves(state.board)
+            moves = (
+                self.legal_moves_cache[state.board]
+                if self.legal_moves_cache
+                else legal_moves(state.board)
+            )
 
             for cell in moves:
                 # Let’s NOT assume greedy; just enumerate all moves.
@@ -84,8 +135,11 @@ class SLOBGame2x2:
                     next_state = State(
                         board=next_board, x_chips=nx, o_chips=no, advantage=next_adv
                     )
+                    next_state = canonicalize_state(next_state, self.canonical_map)
 
                     succ[next_state] = succ.get(next_state, 0.0) + p_outcome
+        if not succ:
+            return {}
 
         total = sum(succ.values())
         for k in succ:
@@ -166,4 +220,6 @@ class SLOBGame2x2:
         # ----------------------
         # 4. Return next state
         # ----------------------
-        return State(next_board, next_x, next_o, adv)
+        return canonicalize_state(
+            State(next_board, next_x, next_o, adv), self.canonical_map
+        )

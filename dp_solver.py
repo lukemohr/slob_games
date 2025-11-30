@@ -9,8 +9,8 @@ from scipy.optimize import linprog  # type: ignore
 from bidding import bidding_outcomes
 from constants import P1, P2
 from game2x2 import SLOBGame2x2
-from state import CellType, State
-from transitions import apply_cell, canonical_terminal_state, check_winner, legal_moves
+from state import CellType, State, canonicalize_state
+from transitions import apply_cell, legal_moves
 
 
 def count_wins_for_player(
@@ -92,7 +92,7 @@ def is_legal_board(
     return False
 
 
-def generate_all_states(game: SLOBGame2x2, total_chips: int) -> list[State]:
+def generate_all_states(game: SLOBGame2x2) -> list[State]:
     """Generate all possible states of the game.
 
     This includes:
@@ -101,8 +101,7 @@ def generate_all_states(game: SLOBGame2x2, total_chips: int) -> list[State]:
         - advantage ∈ {X, O}
 
     Args:
-        game (Game): The game being played.
-        total_chips (int): The total number of chips in the game.
+        game: The game being played.
 
     Returns:
         list[State]: All possible states in the game.
@@ -113,7 +112,10 @@ def generate_all_states(game: SLOBGame2x2, total_chips: int) -> list[State]:
     legal_boards = [
         board for board in all_boards if is_legal_board(game.win_lines, board)
     ]
-    chip_distributions = [(total_chips - i, i) for i in range(total_chips + 1)]
+    game.legal_moves_cache = {board: legal_moves(board) for board in legal_boards}
+    chip_distributions = [
+        (game.total_chips - i, i) for i in range(game.total_chips + 1)
+    ]
     advantages = [0, 1]
     states = []
     for board in legal_boards:
@@ -122,7 +124,7 @@ def generate_all_states(game: SLOBGame2x2, total_chips: int) -> list[State]:
         if is_term:
             # Terminal: keep ONE canonical version
             # (chips and advantage are irrelevant)
-            states.append(canonical_terminal_state(board))
+            states.append(game.canonical_map[board])
             continue
 
         # Non-terminal: enumerate all chip-distribution × advantage combinations
@@ -136,7 +138,7 @@ def generate_all_states(game: SLOBGame2x2, total_chips: int) -> list[State]:
                 )
             )
 
-    return states
+    return list(set(states))
 
 
 def initialize_values(states: list[State], game: SLOBGame2x2) -> dict[State, float]:
@@ -157,13 +159,11 @@ def initialize_values(states: list[State], game: SLOBGame2x2) -> dict[State, flo
 
     """
     initial_values = {}
+    terminal_boards = game.find_terminal_boards()
+
     for state in states:
-        is_win, winner = check_winner(game.win_lines, state.board)
-        if is_win:
-            if winner in (0, 1):
-                initial_values[state] = 1.0 - winner
-            else:
-                initial_values[state] = 0.5  # draw
+        if state.board in terminal_boards:
+            initial_values[state] = terminal_boards[state.board]
         else:
             initial_values[state] = 0.5
     return initial_values
@@ -199,16 +199,13 @@ def expected_value_of_move(
 
     # Stochastic outcomes of applying this move
     for next_board, p_outcome in apply_cell(game.board_probs, board, cell, winner):
-        is_term, _ = game.is_terminal(next_board)
-        if is_term:
-            next_state = canonical_terminal_state(next_board)
-        else:
-            next_state = State(
-                board=next_board,
-                x_chips=nx,
-                o_chips=no,
-                advantage=next_adv,
-            )
+        next_state = State(
+            board=next_board,
+            x_chips=nx,
+            o_chips=no,
+            advantage=next_adv,
+        )
+        next_state = canonicalize_state(next_state, game.canonical_map)
         exp_value += p_outcome * V[next_state]
 
     return exp_value
@@ -271,7 +268,7 @@ def build_bidding_matrix(
     """
     M_s = np.zeros((state.x_chips + 1, state.o_chips + 1))
 
-    legal = legal_moves(state.board)
+    legal = game.legal_moves_cache[state.board]
 
     for bx, bo, winner, nx, no, next_adv in bidding_outcomes(state):
         # Compute all move EVs (list of float)
@@ -435,7 +432,19 @@ def value_iteration(
     tolerance: float = 1e-6,
     max_iters: int = 1000,
 ) -> dict[State, float]:
-    """Run value iteration until convergence."""
+    """Run value iteration until convergence.
+
+    Args:
+        states: All states being evaluated.
+        game: Game being played.
+        V_init: Initial value for V.
+        tolerance: Tolerance value for convergence.
+        max_iters: Maximum iterations in attempting convergence.
+
+    Returns:
+        Final V after iterations.
+
+    """
     v = V_init.copy()
 
     for i in range(max_iters):
