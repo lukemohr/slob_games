@@ -267,7 +267,6 @@ def build_bidding_matrix(
 
     """
     M_s = np.zeros((state.x_chips + 1, state.o_chips + 1))
-
     legal = game.legal_moves_cache[state.board]
 
     for bx, bo, winner, nx, no, next_adv in bidding_outcomes(state):

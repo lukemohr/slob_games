@@ -18,4 +18,4 @@ def game2x2():
             [1.0, 0.0, 0.0],
         ]
     )
-    return SLOBGame2x2(board_probs=probs)
+    return SLOBGame2x2(board_probs=probs, total_chips=3)

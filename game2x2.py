@@ -31,6 +31,7 @@ class SLOBGame2x2:
         self.total_chips = total_chips
         self.canonical_map = self.build_terminal_canonical_map(total_chips)
         self.legal_moves_cache = {}
+        self.successor_cache = {}
 
     def is_terminal(self, board: tuple) -> tuple[bool, None | float]:
         """Check if the game has reached a terminal state.
@@ -95,6 +96,24 @@ class SLOBGame2x2:
             canonical_map[board] = state
         return canonical_map
 
+    def get_successors(self, state: State) -> dict[State, float]:
+        """Return the canonical successor distribution of `state`.
+
+        Caching rules:
+        - If state is terminal → return {}
+        - If state exists in successor_cache → return cached result
+        - Else → compute successors(state) once, store in cache, return it
+        """
+        if self.is_terminal(state.board)[0]:
+            return {}
+        canonical_state = canonicalize_state(state, self.canonical_map)
+        if canonical_state in self.successor_cache:
+            return self.successor_cache[canonical_state]
+        else:
+            new_successors = self.successors(canonical_state)
+            self.successor_cache[canonical_state] = new_successors
+            return new_successors
+
     def successors(self, state: State) -> dict[State, float]:
         """Generate all possible successor states from the current state.
 
@@ -120,11 +139,10 @@ class SLOBGame2x2:
             # But we keep computation structure simple.
 
             # Winner chooses a move; in DP, both players choose BEST move
-            moves = (
-                self.legal_moves_cache[state.board]
-                if self.legal_moves_cache
-                else legal_moves(state.board)
-            )
+            if state.board in self.legal_moves_cache:
+                moves = self.legal_moves_cache[state.board]
+            else:
+                moves = legal_moves(state.board)
 
             for cell in moves:
                 # Let’s NOT assume greedy; just enumerate all moves.

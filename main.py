@@ -22,7 +22,7 @@ def main():
         # X=0, O=1
         advantage = 0
         state = State(board, x_chips, o_chips, advantage)
-        game = SLOBGame2x2(board_probs)
+        game = SLOBGame2x2(board_probs, x_chips + o_chips)
         winner = simulate_game(state, game)
         if winner == 0:
             wins["X"] += 1

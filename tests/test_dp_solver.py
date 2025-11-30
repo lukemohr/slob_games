@@ -1,19 +1,15 @@
 """Tests for dp_solver.py."""
 
-from collections import defaultdict
-
 import numpy as np
 import pytest
 
 from dp_solver import (
-    build_bidding_matrix,
     generate_all_states,
     initialize_values,
     is_legal_board,
     solve_zero_sum_matrix_game,
     value_iteration,
 )
-from state import State
 
 WIN_LINES_2x2 = [(0, 1), (2, 3), (0, 2), (1, 3)]
 
@@ -78,23 +74,9 @@ def test_solver_simple_bimatrix():
     assert abs(val - 0.5) < 1e-6
 
 
-def test_bidding_matrix_single_move_choice(game2x2):
-    """Test simple M."""
-    board = (None, None, None, None)
-    state = State(board, 1, 1, 0)
-
-    # V[next_state] is always 0.7, for any state
-    V = defaultdict(lambda: 0.7)
-
-    M = build_bidding_matrix(state, game2x2, V)
-
-    # All entries of M should be 0.7
-    assert np.allclose(M, 0.7)
-
-
 def test_value_iteration_converges_trivial(game2x2):
     """Test value iteration convergence."""
-    states = generate_all_states(game2x2, total_chips=2)
+    states = generate_all_states(game2x2)
     V_init = initialize_values(states, game2x2)
 
     V_final = value_iteration(states, game2x2, V_init, tolerance=1e-6, max_iters=50)
